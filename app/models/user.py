@@ -1,6 +1,7 @@
 from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
+from sqlalchemy.orm import relationship
 
 
 class User(Base):
@@ -11,3 +12,4 @@ class User(Base):
     email: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     hashed_password: Mapped[str] = mapped_column(String, nullable=False)
 
+    categories = relationship("Category", back_populates="owner")
