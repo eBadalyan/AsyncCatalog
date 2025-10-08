@@ -8,20 +8,17 @@ from typing import List
 
 
 
-router = APIRouter(
-    prefix="/products",
-    tags=["Products"]
-)
+router = APIRouter(prefix="/products", tags=["Products"])
 
 @router.post("/", response_model=ProductRead)
 async def create_product(
     product_in: ProductCreate, 
-    sesssion: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session)
 ):
     db_product = Product(**product_in.model_dump())
-    sesssion.add(db_product)
-    await sesssion.commit()
-    await sesssion.refresh(db_product)
+    session.add(db_product)
+    await session.commit()
+    await session.refresh(db_product)
 
     return db_product
 

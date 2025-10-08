@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from app.database import create_db_and_tables
-from app.api.endpoints import product
+from app.api.endpoints import product, auth, user
 
 
 class HealthMessage(BaseModel):
@@ -17,6 +17,8 @@ async def startup_event():
     print("Таблицы созданы!")
 
 app.include_router(product.router)
+app.include_router(auth.router)
+app.include_router(user.router)
 
 @app.get("/health", response_model=HealthMessage)
 async def get_health():
