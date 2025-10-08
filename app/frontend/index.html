@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastAPI CRUD Каталог - Аутентификация</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            min-height: 100vh;
+            display: flex;
+            /* body должен быть всегда center по горизонтали, чтобы центрировать app-container */
+            justify-content: center;
+            /* body alignment будет меняться в JS: items-center для Auth, items-start для Catalog */
+            align-items: center; 
+            padding: 20px;
+        }
+        input:focus, textarea:focus {
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5); 
+            border-color: #6366f1;
+        }
+        .product-card { transition: all 0.2s ease-in-out; }
+        .product-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        .hidden { display: none; }
+        
+        /* Удаляем фиксированный max-width из CSS и переносим его в HTML, используя mx-auto для центрирования */
+        #auth-view {
+            width: 100%;
+        }
+        /* В HTML для catalog-view будут добавлены классы max-w-4xl mx-auto */
+        
+        #app-container {
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="message-box" class="fixed top-4 right-4 z-50 transition-opacity duration-300 opacity-0"></div>
+
+    <!-- Общий контейнер приложения -->
+    <div id="app-container" class="w-full">
+        
+        <!-- ============================================== -->
+        <!-- 1. РЕЖИМ АУТЕНТИФИКАЦИИ (AUTH VIEW) -->
+        <!-- ============================================== -->
+        <div id="auth-view" class="max-w-md mx-auto p-8 bg-white rounded-xl shadow-2xl">
+            <h1 class="text-3xl font-bold text-gray-800 text-center mb-6">Вход в систему</h1>
+            
+            <!-- Переключатель Вход/Регистрация -->
+            <div class="flex mb-6 border-b border-gray-200">
+                <button id="login-tab" onclick="toggleAuthMode('login')" class="flex-1 py-3 text-lg font-medium text-indigo-600 border-b-2 border-indigo-600 transition duration-200">Вход</button>
+                <button id="register-tab" onclick="toggleAuthMode('register')" class="flex-1 py-3 text-lg font-medium text-gray-500 hover:text-indigo-600 transition duration-200">Регистрация</button>
+            </div>
+            
+            <!-- Форма Входа -->
+            <form id="login-form" onsubmit="handleLogin(event)">
+                <div class="space-y-4">
+                    <input type="email" id="login-email" placeholder="Email" required
+                           class="w-full p-3 border border-gray-300 rounded-lg">
+                    <input type="password" id="login-password" placeholder="Пароль" required
+                           class="w-full p-3 border border-gray-300 rounded-lg">
+                </div>
+                <button type="submit"
+                        class="w-full mt-6 px-4 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition duration-150 shadow-md">
+                    Войти
+                </button>
+            </form>
+            
+            <!-- Форма Регистрации (скрыта) -->
+            <form id="register-form" onsubmit="handleRegister(event)" class="hidden">
+                <div class="space-y-4">
+                    <input type="email" id="register-email" placeholder="Email" required
+                           class="w-full p-3 border border-gray-300 rounded-lg">
+                    <input type="text" id="register-username" placeholder="Имя пользователя" required
+                           class="w-full p-3 border border-gray-300 rounded-lg">
+                    <input type="password" id="register-password" placeholder="Пароль" required
+                           class="w-full p-3 border border-gray-300 rounded-lg">
+                </div>
+                <button type="submit"
+                        class="w-full mt-6 px-4 py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition duration-150 shadow-md">
+                    Зарегистрироваться
+                </button>
+            </form>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- 2. РЕЖИМ КАТАЛОГА (CATALOG VIEW) -->
+        <!-- НОВОЕ: max-w-4xl (для ограничения ширины) и mx-auto (для горизонтального центрирования) -->
+        <!-- ============================================== -->
+        <div id="catalog-view" class="hidden max-w-4xl mx-auto">
+            <header class="text-center mb-8 flex justify-between items-center">
+                <h1 class="text-3xl font-extrabold text-gray-800">Мои Продукты</h1>
+                <div class="flex items-center space-x-4">
+                    <p id="user-info" class="text-gray-600 font-medium"></p>
+                    <button onclick="handleLogout()"
+                        class="px-4 py-2 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition duration-150 shadow-md whitespace-nowrap">
+                        Выход
+                    </button>
+                </div>
+            </header>
+
+            <!-- 1. Создание (POST) -->
+            <div class="mb-8 p-6 bg-white rounded-xl shadow-lg border border-green-200">
+                <h2 class="text-xl font-semibold text-green-600 mb-4">Создать новый Продукт</h2>
+                <form id="create-form" onsubmit="createProduct(event)">
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                        <input type="text" id="create-name" placeholder="Название" required
+                               class="sm:col-span-2 p-3 border border-gray-300 rounded-lg">
+                        <input type="number" id="create-price" placeholder="Цена (10.00)" required step="0.01"
+                               class="p-3 border border-gray-300 rounded-lg">
+                        <input type="number" id="create-category-id" placeholder="ID Категории (e.g. 1)" required
+                               class="p-3 border border-gray-300 rounded-lg">
+                    </div>
+                    <textarea id="create-description" placeholder="Описание (не обязательно)"
+                              class="w-full p-3 border border-gray-300 rounded-lg my-4 h-16 resize-none"></textarea>
+                    <button type="submit"
+                            class="w-full px-4 py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition duration-150 shadow-md">
+                        Создать Продукт
+                    </button>
+                </form>
+            </div>
+
+
+            <!-- Список Продуктов (GET) -->
+            <div class="p-6 bg-white rounded-xl shadow-2xl">
+                <div class="flex justify-between items-center mb-4 border-b pb-3">
+                    <h2 class="text-2xl font-semibold text-indigo-700">Мои Товары</h2>
+                    <button onclick="readProducts()"
+                            class="px-5 py-2 bg-indigo-500 text-white font-medium rounded-lg hover:bg-indigo-600 transition duration-150 shadow-md">
+                        Обновить Список
+                    </button>
+                </div>
+                
+                <div id="product-list" class="space-y-4">
+                    <p class="text-gray-500 text-center py-4">Нажмите "Обновить Список", чтобы загрузить данные.</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- КОНФИГУРАЦИЯ И ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ---
+        const BASE_URL = 'http://127.0.0.1:8000';
+        const messageBox = document.getElementById('message-box');
+
+        let currentUserId = null; 
+
+        window.onload = function() {
+            const storedToken = localStorage.getItem('authToken');
+            if (storedToken) {
+                fetchCurrentUser().then(() => {
+                    toggleView('catalog');
+                    readProducts();
+                });
+            } else {
+                toggleView('auth');
+                toggleAuthMode('login'); 
+            }
+        };
+        
+        // --- Управление Отображением и Утилиты ---
+
+        function toggleView(viewName) {
+            document.getElementById('auth-view').classList.add('hidden');
+            document.getElementById('catalog-view').classList.add('hidden');
+            
+            if (viewName === 'auth') {
+                document.getElementById('auth-view').classList.remove('hidden');
+                // Для Auth: центрирование по вертикали и горизонтали
+                document.body.classList.remove('items-start');
+                document.body.classList.add('items-center');
+            } else if (viewName === 'catalog') {
+                document.getElementById('catalog-view').classList.remove('hidden');
+                // Для Catalog: выравнивание по верхнему краю (для прокрутки)
+                document.body.classList.remove('items-center');
+                document.body.classList.add('items-start');
+            }
+            // Горизонтальное центрирование (justify-content: center) остается в body CSS
+        }
+
+        function toggleAuthMode(mode) {
+            currentAuthMode = mode;
+            const loginForm = document.getElementById('login-form');
+            const registerForm = document.getElementById('register-form');
+            const loginTab = document.getElementById('login-tab');
+            const registerTab = document.getElementById('register-tab');
+
+            if (mode === 'login') {
+                loginForm.classList.remove('hidden');
+                registerForm.classList.add('hidden');
+                loginTab.classList.add('border-indigo-600', 'text-indigo-600');
+                loginTab.classList.remove('border-transparent', 'text-gray-500');
+                registerTab.classList.remove('border-indigo-600', 'text-indigo-600');
+                registerTab.classList.add('border-transparent', 'text-gray-500');
+            } else {
+                loginForm.classList.add('hidden');
+                registerForm.classList.remove('hidden');
+                registerTab.classList.add('border-indigo-600', 'text-indigo-600');
+                registerTab.classList.remove('border-transparent', 'text-gray-500');
+                loginTab.classList.remove('border-indigo-600', 'text-indigo-600');
+                loginTab.classList.add('border-transparent', 'text-gray-500');
+            }
+        }
+
+        function showMessage(msg, type = 'info') {
+            const colors = {
+                success: 'bg-green-100 text-green-800 border-green-400',
+                error: 'bg-red-100 text-red-800 border-red-400',
+                info: 'bg-blue-100 text-blue-800 border-blue-400'
+            };
+            messageBox.innerHTML = `
+                <div class="p-3 border rounded-lg shadow-md ${colors[type]}">
+                    ${msg}
+                </div>
+            `;
+            messageBox.style.opacity = '1';
+
+            setTimeout(() => {
+                messageBox.style.opacity = '0';
+            }, 3000);
+        }
+
+        function formatErrorDetail(detail) {
+            if (Array.isArray(detail)) {
+                return detail.map(err => {
+                    const loc = err.loc.slice(1).join('.'); 
+                    return `[${loc}]: ${err.msg}`;
+                }).join('; ');
+            }
+            return detail; 
+        }
+
+        function getAuthHeaders() {
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                showMessage('Ошибка: Вы не авторизованы. Войдите в систему.', 'error');
+                return null;
+            }
+            return {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            };
+        }
+
+        // --- ФУНКЦИИ АУТЕНТИФИКАЦИИ И ПРОФИЛЯ ---
+
+        async function fetchCurrentUser() {
+            const headers = getAuthHeaders();
+            if (!headers) return;
+
+            try {
+                const response = await fetch(BASE_URL + '/users/me', {
+                    method: 'GET',
+                    headers: headers
+                });
+
+                const user = await response.json();
+
+                if (response.ok) {
+                    currentUserId = user.id; 
+                    document.getElementById('user-info').textContent = `Привет, ${user.name}! (ID: ${user.id})`;
+                } else {
+                    showMessage(`Ошибка получения профиля (${response.status}): ${user.detail || 'Токен недействителен или истек.'}`, 'error');
+                    handleLogout();
+                }
+            } catch (error) {
+                showMessage(`Сетевая ошибка при получении профиля: ${error.message}`, 'error');
+            }
+        }
+
+
+        async function handleLogin(event) {
+            event.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+
+            const formBody = new URLSearchParams({
+                username: email, 
+                password: password
+            });
+
+            try {
+                const response = await fetch(BASE_URL + '/token/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: formBody.toString()
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    localStorage.setItem('authToken', result.access_token);
+                    showMessage('Успешный вход! Добро пожаловать.', 'success');
+                    
+                    await fetchCurrentUser();
+                    toggleView('catalog');
+                    readProducts();
+                } else {
+                    showMessage(`Ошибка входа (${response.status}): ${result.detail || 'Неверный логин или пароль'}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Сетевая ошибка при входе: ${error.message}`, 'error');
+            }
+        }
+
+        async function handleRegister(event) {
+            event.preventDefault();
+            const email = document.getElementById('register-email').value;
+            const username = document.getElementById('register-username').value; 
+            const password = document.getElementById('register-password').value;
+
+            if (password.length < 3) { 
+                 showMessage(`Ошибка: Пароль должен быть не менее 3 символов.`, 'error');
+                 return;
+            }
+
+            const data = {
+                email: email,
+                name: username, 
+                password: password
+            };
+
+            try {
+                const response = await fetch(BASE_URL + '/users/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showMessage(`Пользователь ${result.name} (${result.email}) успешно зарегистрирован!`, 'success');
+                    document.getElementById('register-form').reset();
+                    toggleAuthMode('login'); 
+                } else {
+                    const errorMsg = formatErrorDetail(result.detail);
+                    showMessage(`Ошибка регистрации (${response.status}): ${errorMsg || 'Пользователь с таким email уже существует.'}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Сетевая ошибка при регистрации: ${error.message}`, 'error');
+            }
+        }
+
+        function handleLogout() {
+            localStorage.removeItem('authToken');
+            currentUserId = null; 
+            showMessage('Вы вышли из системы.', 'info');
+            toggleView('auth');
+            toggleAuthMode('login');
+        }
+
+        // --- CRUD ФУНКЦИИ ---
+
+        // POST /products/
+        async function createProduct(event) {
+            event.preventDefault();
+            const headers = getAuthHeaders();
+            if (!headers) return;
+
+            const data = {
+                name: document.getElementById('create-name').value,
+                price: parseFloat(document.getElementById('create-price').value),
+                category_id: parseInt(document.getElementById('create-category-id').value),
+                description: document.getElementById('create-description').value || null 
+            };
+            
+            try {
+                const response = await fetch(BASE_URL + '/products/', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showMessage(`Продукт #${result.id} создан: ${result.name}`, 'success');
+                    document.getElementById('create-form').reset();
+                    readProducts(); 
+                } else {
+                    showMessage(`Ошибка POST (${response.status}): ${result.detail || result.error || 'Неизвестная ошибка'}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Сетевая ошибка: ${error.message}`, 'error');
+            }
+        }
+
+        // GET /products/ (С КЛИЕНТСКОЙ ФИЛЬТРАЦИЕЙ)
+        async function readProducts() {
+            const listContainer = document.getElementById('product-list');
+            listContainer.innerHTML = '<p class="text-indigo-500 font-medium text-center py-4">Загрузка...</p>';
+
+            try {
+                const response = await fetch(BASE_URL + '/products/');
+                let products = await response.json();
+
+                if (response.ok) {
+                    if (currentUserId !== null) {
+                        products = products.filter(p => p.owner_id === currentUserId);
+                    }
+
+                    if (products.length === 0) {
+                        listContainer.innerHTML = '<p class="text-gray-500 text-center py-4">У вас пока нет созданных продуктов.</p>';
+                        return;
+                    }
+
+                    listContainer.innerHTML = products.map(p => {
+                        const isOwner = p.owner_id === currentUserId;
+                        const actionButtons = isOwner ? `
+                            <button onclick="toggleEditMode(${p.id})"
+                                    class="px-3 py-1 text-sm bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition shadow-md">
+                                Редактировать
+                            </button>
+                            <button onclick="deleteProduct(${p.id})"
+                                    class="px-3 py-1 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 transition shadow-md">
+                                Удалить
+                            </button>
+                        ` : '';
+
+                        return `
+                            <div id="product-card-${p.id}" class="product-card p-4 bg-indigo-50 rounded-lg shadow-md border border-indigo-100">
+                                
+                                <!-- Режим Отображения (Display Mode) -->
+                                <div id="display-mode-${p.id}">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-xl font-bold text-indigo-800">${p.name} (#${p.id})</span>
+                                        <span class="text-2xl font-extrabold text-green-700">${p.price.toFixed(2)} ₽</span>
+                                    </div>
+                                    <p class="text-sm text-gray-700">
+                                        Категория: <strong>${p.category.name}</strong> (ID: ${p.category_id})
+                                    </p>
+                                    <p class="text-xs text-gray-500 mt-2">
+                                        Владелец: ${p.owner_id} | ${p.description || 'Нет описания'}
+                                    </p>
+
+                                    <div class="mt-4 pt-3 border-t border-indigo-200 flex justify-end space-x-3">
+                                        ${actionButtons}
+                                    </div>
+                                </div>
+
+                                <!-- Режим Редактирования (Edit Mode) - Скрыт по умолчанию -->
+                                <div id="edit-mode-${p.id}" class="hidden">
+                                    <form id="update-form-${p.id}" onsubmit="updateProduct(event, ${p.id})">
+                                        <div class="space-y-3">
+                                            <input type="text" id="edit-name-${p.id}" placeholder="Название" value="${p.name}"
+                                                class="w-full p-2 border border-gray-300 rounded-lg">
+                                            <div class="grid grid-cols-2 gap-3">
+                                                <input type="number" id="edit-price-${p.id}" placeholder="Цена" value="${p.price}" step="0.01"
+                                                    class="w-full p-2 border border-gray-300 rounded-lg">
+                                                <input type="number" id="edit-category-id-${p.id}" placeholder="ID Категории" value="${p.category_id}"
+                                                    class="w-full p-2 border border-gray-300 rounded-lg">
+                                            </div>
+                                            <textarea id="edit-description-${p.id}" placeholder="Описание"
+                                                class="w-full p-2 border border-gray-300 rounded-lg h-16 resize-none">${p.description || ''}</textarea>
+                                        </div>
+                                        <div class="mt-4 flex justify-end space-x-3">
+                                            <button type="button" onclick="toggleEditMode(${p.id})"
+                                                    class="px-3 py-2 text-sm bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition">
+                                                Отмена
+                                            </button>
+                                            <button type="submit"
+                                                    class="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-md">
+                                                Сохранить (PUT)
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    listContainer.innerHTML = `<p class="text-red-500 text-center py-4">Ошибка GET (${response.status}): ${products.detail || 'Неизвестная ошибка'}</p>`;
+                }
+            } catch (error) {
+                listContainer.innerHTML = `<p class="text-red-500 text-center py-4">Сетевая ошибка при загрузке: ${error.message}</p>`;
+            }
+        }
+        
+        function toggleEditMode(productId) {
+            const displayMode = document.getElementById(`display-mode-${productId}`);
+            const editMode = document.getElementById(`edit-mode-${productId}`);
+
+            if (displayMode.classList.contains('hidden')) {
+                displayMode.classList.remove('hidden');
+                editMode.classList.add('hidden');
+            } else {
+                displayMode.classList.add('hidden');
+                editMode.classList.remove('hidden');
+            }
+        }
+
+        // PUT /products/{id}
+        async function updateProduct(event, productId) {
+            event.preventDefault();
+            const headers = getAuthHeaders();
+            if (!headers) return;
+            
+            const data = {
+                name: document.getElementById(`edit-name-${productId}`).value,
+                price: parseFloat(document.getElementById(`edit-price-${productId}`).value),
+                category_id: parseInt(document.getElementById(`edit-category-id-${productId}`).value),
+                description: document.getElementById(`edit-description-${productId}`).value || null 
+            };
+            
+            try {
+                const response = await fetch(`${BASE_URL}/products/${productId}`, {
+                    method: 'PUT',
+                    headers: headers,
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showMessage(`Продукт #${productId} успешно ОБНОВЛЕН.`, 'success');
+                    toggleEditMode(productId); 
+                    readProducts();
+                } else {
+                    showMessage(`Ошибка PUT (${response.status}): ${result.detail || 'Неизвестная ошибка'}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Сетевая ошибка при обновлении: ${error.message}`, 'error');
+            }
+        }
+        
+        // DELETE /products/{id}
+        async function deleteProduct(productId) {
+            const headers = getAuthHeaders();
+            if (!headers) return;
+            
+            console.log(`Пробуем удалить продукт с ID ${productId}.`);
+            
+            try {
+                const response = await fetch(`${BASE_URL}/products/${productId}`, {
+                    method: 'DELETE',
+                    headers: headers
+                });
+
+                if (response.status === 204) {
+                    showMessage(`Продукт #${productId} успешно УДАЛЕН.`, 'success');
+                    readProducts();
+                } else {
+                    const result = await response.json();
+                    showMessage(`Ошибка DELETE (${response.status}): ${result.detail || 'Неизвестная ошибка'}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Сетевая ошибка при удалении: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>
