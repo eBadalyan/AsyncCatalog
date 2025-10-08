@@ -4,6 +4,7 @@ from app.database import create_db_and_tables
 from app.api.endpoints import product as product_router
 from app.api.endpoints import user as user_router
 from app.api.endpoints import auth as auth_router
+from app.api.endpoints import category as category_router
 from app.models import user, product, category
 
 
@@ -22,6 +23,7 @@ async def startup_event():
 app.include_router(product_router.router)
 app.include_router(auth_router.router, tags=["Auth"])
 app.include_router(user_router.router)
+app.include_router(category_router.router)
 
 @app.get("/health", response_model=HealthMessage)
 async def get_health():
