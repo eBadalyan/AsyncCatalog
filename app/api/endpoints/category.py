@@ -8,7 +8,7 @@ from app.database import get_async_session
 from app.schemas.category import CategoryCreate, CategoryRead
 from app.models.category import Category
 from app.models.user import User
-from app.core.security import get_current_user
+from app.core.security import get_current_user, get_current_admin
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
 
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/categories", tags=["Categories"])
 async def create_category(
     category_in: CategoryCreate, 
     session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_user) 
+    current_user: User = Depends(get_current_admin) 
 ):    
     db_category = Category(
         name=category_in.name,

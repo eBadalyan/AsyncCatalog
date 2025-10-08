@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from app.core.security import get_current_user
+from app.core.security import get_current_user, get_current_seller
 from app.models.user import User
 from app.schemas.product import ProductCreate, ProductRead 
 from app.database import get_async_session
@@ -21,7 +21,7 @@ def select_product_with_category():
 async def create_product(
     product_in: ProductCreate, 
     session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_seller)
 ):
     """Создать новый продукт. Требуется авторизация."""
     
@@ -88,7 +88,7 @@ async def update_product(
     product_id: int, 
     product_in: ProductCreate, 
     session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_user) 
+    current_user: User = Depends(get_current_seller) 
 ):
     """Обновить существующий продукт. Только владелец может это сделать."""
     
@@ -137,7 +137,7 @@ async def update_product(
 async def delete_product(
     product_id: int, 
     session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_user) 
+    current_user: User = Depends(get_current_seller) 
 ):
     """Удалить продукт. Только владелец может это сделать."""
     

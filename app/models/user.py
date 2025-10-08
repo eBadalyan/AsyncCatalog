@@ -14,3 +14,4 @@ class User(Base):
     role: Mapped[str] = mapped_column(String, default="buyer", nullable=False)
 
     categories = relationship("Category", back_populates="owner")
+    cart_items = relationship("CartItem", back_populates="user")
