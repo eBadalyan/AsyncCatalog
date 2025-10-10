@@ -3,557 +3,1050 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastAPI CRUD Каталог - Аутентификация</title>
-    <!-- Tailwind CSS CDN -->
+    <title>Async Catalog</title>
+    <!-- Подключение Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f3f4f6;
-            min-height: 100vh;
-            display: flex;
-            /* body должен быть всегда center по горизонтали, чтобы центрировать app-container */
-            justify-content: center;
-            /* body alignment будет меняться в JS: items-center для Auth, items-start для Catalog */
-            align-items: center; 
-            padding: 20px;
+        /* Стиль для анимации загрузки */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #4f46e5; /* Indigo */
+            animation: spin 1s ease infinite;
         }
-        input:focus, textarea:focus {
-            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5); 
-            border-color: #6366f1;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
-        .product-card { transition: all 0.2s ease-in-out; }
-        .product-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
-        .hidden { display: none; }
-        
-        /* Удаляем фиксированный max-width из CSS и переносим его в HTML, используя mx-auto для центрирования */
-        #auth-view {
-            width: 100%;
+        /* Стиль для активной вкладки */
+        .tab-active {
+            color: #4f46e5; /* indigo-700 */
+            border-bottom-color: #4f46e5; /* indigo-700 */
         }
-        /* В HTML для catalog-view будут добавлены классы max-w-4xl mx-auto */
-        
-        #app-container {
-            width: 100%;
+        /* Общий стиль для модальных окон */
+        .modal {
+            transition: opacity 0.3s ease-in-out;
         }
     </style>
 </head>
-<body>
-    <div id="message-box" class="fixed top-4 right-4 z-50 transition-opacity duration-300 opacity-0"></div>
-
-    <!-- Общий контейнер приложения -->
-    <div id="app-container" class="w-full">
-        
-        <!-- ============================================== -->
-        <!-- 1. РЕЖИМ АУТЕНТИФИКАЦИИ (AUTH VIEW) -->
-        <!-- ============================================== -->
-        <div id="auth-view" class="max-w-md mx-auto p-8 bg-white rounded-xl shadow-2xl">
-            <h1 class="text-3xl font-bold text-gray-800 text-center mb-6">Вход в систему</h1>
+<body class="bg-gray-50 min-h-screen font-sans antialiased">
+    <div id="app" class="container mx-auto p-4 md:p-8">
+        <!-- Заголовок приложения и статус пользователя -->
+        <header class="mb-8 p-5 bg-white shadow-lg rounded-xl flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+            <h1 class="text-3xl font-extrabold text-indigo-700">Асинхронный Каталог</h1>
             
-            <!-- Переключатель Вход/Регистрация -->
-            <div class="flex mb-6 border-b border-gray-200">
-                <button id="login-tab" onclick="toggleAuthMode('login')" class="flex-1 py-3 text-lg font-medium text-indigo-600 border-b-2 border-indigo-600 transition duration-200">Вход</button>
-                <button id="register-tab" onclick="toggleAuthMode('register')" class="flex-1 py-3 text-lg font-medium text-gray-500 hover:text-indigo-600 transition duration-200">Регистрация</button>
+            <div id="auth-status" class="flex items-center space-x-3">
+                <span id="user-info" class="text-gray-600 font-medium text-sm md:text-base"></span>
+                <button id="logout-btn" onclick="logout()" class="hidden bg-gray-200 hover:bg-red-100 text-red-600 font-bold py-2 px-4 rounded-full shadow-md transition duration-300 text-sm">
+                    Выйти
+                </button>
             </div>
-            
-            <!-- Форма Входа -->
-            <form id="login-form" onsubmit="handleLogin(event)">
-                <div class="space-y-4">
-                    <input type="email" id="login-email" placeholder="Email" required
-                           class="w-full p-3 border border-gray-300 rounded-lg">
-                    <input type="password" id="login-password" placeholder="Пароль" required
-                           class="w-full p-3 border border-gray-300 rounded-lg">
-                </div>
-                <button type="submit"
-                        class="w-full mt-6 px-4 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition duration-150 shadow-md">
-                    Войти
-                </button>
-            </form>
-            
-            <!-- Форма Регистрации (скрыта) -->
-            <form id="register-form" onsubmit="handleRegister(event)" class="hidden">
-                <div class="space-y-4">
-                    <input type="email" id="register-email" placeholder="Email" required
-                           class="w-full p-3 border border-gray-300 rounded-lg">
-                    <input type="text" id="register-username" placeholder="Имя пользователя" required
-                           class="w-full p-3 border border-gray-300 rounded-lg">
-                    <input type="password" id="register-password" placeholder="Пароль" required
-                           class="w-full p-3 border border-gray-300 rounded-lg">
-                </div>
-                <button type="submit"
-                        class="w-full mt-6 px-4 py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition duration-150 shadow-md">
-                    Зарегистрироваться
-                </button>
-            </form>
-        </div>
+        </header>
 
-        <!-- ============================================== -->
-        <!-- 2. РЕЖИМ КАТАЛОГА (CATALOG VIEW) -->
-        <!-- НОВОЕ: max-w-4xl (для ограничения ширины) и mx-auto (для горизонтального центрирования) -->
-        <!-- ============================================== -->
-        <div id="catalog-view" class="hidden max-w-4xl mx-auto">
-            <header class="text-center mb-8 flex justify-between items-center">
-                <h1 class="text-3xl font-extrabold text-gray-800">Мои Продукты</h1>
-                <div class="flex items-center space-x-4">
-                    <p id="user-info" class="text-gray-600 font-medium"></p>
-                    <button onclick="handleLogout()"
-                        class="px-4 py-2 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition duration-150 shadow-md whitespace-nowrap">
-                        Выход
-                    </button>
-                </div>
-            </header>
+        <!-- Формы аутентификации/регистрации -->
+        <div id="auth-forms" class="max-w-md mx-auto p-6 bg-white rounded-xl shadow-xl space-y-6">
+            <h2 class="text-2xl font-bold text-gray-800 text-center">Вход в систему</h2>
+            
+            <!-- Заголовки вкладок -->
+            <div class="flex border-b border-gray-200 mb-6">
+                <button id="tab-login-btn" onclick="showAuthTab('login')" class="tab-btn w-1/2 py-3 text-lg font-semibold text-center text-gray-500 border-b-2 border-transparent hover:text-indigo-700 transition duration-150">
+                    Вход
+                </button>
+                <button id="tab-register-btn" onclick="showAuthTab('register')" class="tab-btn w-1/2 py-3 text-lg font-semibold text-center text-gray-500 border-b-2 border-transparent hover:text-indigo-700 transition duration-150">
+                    Регистрация
+                </button>
+            </div>
 
-            <!-- 1. Создание (POST) -->
-            <div class="mb-8 p-6 bg-white rounded-xl shadow-lg border border-green-200">
-                <h2 class="text-xl font-semibold text-green-600 mb-4">Создать новый Продукт</h2>
-                <form id="create-form" onsubmit="createProduct(event)">
-                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                        <input type="text" id="create-name" placeholder="Название" required
-                               class="sm:col-span-2 p-3 border border-gray-300 rounded-lg">
-                        <input type="number" id="create-price" placeholder="Цена (10.00)" required step="0.01"
-                               class="p-3 border border-gray-300 rounded-lg">
-                        <input type="number" id="create-category-id" placeholder="ID Категории (e.g. 1)" required
-                               class="p-3 border border-gray-300 rounded-lg">
-                    </div>
-                    <textarea id="create-description" placeholder="Описание (не обязательно)"
-                              class="w-full p-3 border border-gray-300 rounded-lg my-4 h-16 resize-none"></textarea>
-                    <button type="submit"
-                            class="w-full px-4 py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition duration-150 shadow-md">
-                        Создать Продукт
-                    </button>
+            <!-- Содержимое вкладки: Вход -->
+            <div id="tab-login-content" class="tab-content">
+                <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
+                    <input type="email" id="login-email" placeholder="Email" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150">
+                    <input type="password" id="login-password" placeholder="Пароль" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150">
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-md transition duration-300">Войти</button>
                 </form>
             </div>
 
-
-            <!-- Список Продуктов (GET) -->
-            <div class="p-6 bg-white rounded-xl shadow-2xl">
-                <div class="flex justify-between items-center mb-4 border-b pb-3">
-                    <h2 class="text-2xl font-semibold text-indigo-700">Мои Товары</h2>
-                    <button onclick="readProducts()"
-                            class="px-5 py-2 bg-indigo-500 text-white font-medium rounded-lg hover:bg-indigo-600 transition duration-150 shadow-md">
-                        Обновить Список
-                    </button>
-                </div>
-                
-                <div id="product-list" class="space-y-4">
-                    <p class="text-gray-500 text-center py-4">Нажмите "Обновить Список", чтобы загрузить данные.</p>
-                </div>
+            <!-- Содержимое вкладки: Регистрация -->
+            <div id="tab-register-content" class="tab-content hidden">
+                <form id="register-form" onsubmit="handleRegister(event)" class="space-y-4">
+                    <input type="text" id="register-name" placeholder="Имя" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 transition duration-150">
+                    <input type="email" id="register-email" placeholder="Email" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 transition duration-150">
+                    <input type="password" id="register-password" placeholder="Пароль" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 transition duration-150">
+                    <select id="register-role" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 transition duration-150">
+                        <option value="buyer">Покупатель</option>
+                        <option value="seller">Продавец</option>
+                    </select>
+                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg shadow-md transition duration-300">Зарегистрироваться</button>
+                </form>
             </div>
         </div>
 
+        <!-- Сообщения об ошибках и успехе -->
+        <div id="message-area" class="mt-4 text-center max-w-md mx-auto"></div>
+
+        <!-- ----- ОСНОВНОЙ КОНТЕНТ (КАТАЛОГ/АДМИН) ----- -->
+        <div id="catalog-view" class="mt-10 hidden space-y-8">
+            
+            <!-- Заголовок и Действия -->
+            <div class="flex flex-wrap justify-between items-center mb-6 pb-2">
+                <h2 class="text-3xl font-bold text-gray-800">Каталог Товаров</h2>
+                <div id="catalog-actions" class="flex space-x-3 mt-4 md:mt-0">
+                    
+                    <!-- Кнопка "Управление категориями" - Видна только для админов -->
+                    <button id="manage-category-btn" onclick="showCategoryAdminView()" class="hidden bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 text-sm">
+                        Управление категориями
+                    </button>
+
+                    <!-- Кнопка "Добавить товар" - Видна только для продавцов -->
+                    <button id="add-product-btn" onclick="showAddProductForm()" class="hidden bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 text-sm">
+                        + Добавить товар
+                    </button>
+                    
+                    <button onclick="fetchProducts()" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 text-sm">
+                        Обновить список
+                    </button>
+                </div>
+            </div>
+            
+            <!-- ---------------------------------------------------- -->
+            <!-- НОВЫЙ БЛОК: УПРАВЛЕНИЕ КАТЕГОРИЯМИ (ТОЛЬКО АДМИН) -->
+            <!-- ---------------------------------------------------- -->
+            <div id="category-admin-view" class="hidden p-6 bg-white rounded-xl shadow-xl">
+                <h3 class="text-2xl font-bold text-purple-700 mb-4 border-b border-purple-200 pb-3">Управление Категориями</h3>
+                
+                <!-- Таблица категорий -->
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Товаров (статистика)</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="category-table-body" class="bg-white divide-y divide-gray-200">
+                            <!-- Категории будут загружены сюда функцией renderCategoryAdminTable() -->
+                        </tbody>
+                    </table>
+                    <p id="categories-empty" class="text-center text-gray-500 mt-4 hidden">Нет доступных категорий.</p>
+                </div>
+                
+                <!-- Кнопка добавления категории -->
+                <button onclick="showAddCategoryModal()" class="mt-4 w-full md:w-auto bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 text-sm flex items-center justify-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                    <span>Добавить новую категорию</span>
+                </button>
+
+                <button onclick="hideCategoryAdminView()" class="mt-4 w-full md:w-auto ml-3 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 text-sm">
+                    Назад к каталогу
+                </button>
+            </div>
+            
+            <!-- Секция 1: Мои Товары (видно только продавцам, в ОТДЕЛЬНОМ блоке) -->
+            <div id="my-products-wrapper" class="hidden p-6 bg-white rounded-xl shadow-xl">
+                <h3 class="text-2xl font-bold text-indigo-700 mb-4 border-b border-indigo-200 pb-3">Мои Товары (с управлением)</h3>
+                <div id="my-products-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <!-- Мои товары будут загружены сюда -->
+                </div>
+                <p id="my-products-empty" class="text-center text-gray-500 mt-6 hidden">У вас пока нет добавленных товаров. Нажмите "+ Добавить товар", чтобы создать первый.</p>
+            </div>
+
+            <!-- Секция 2: Каталог Всех Товаров (в ОТДЕЛЬНОМ блоке) -->
+            <div id="all-products-wrapper" class="p-6 bg-white rounded-xl shadow-xl">
+                <h3 id="all-products-title" class="text-2xl font-bold text-gray-700 mb-4 border-b border-gray-200 pb-3">Каталог Всех Товаров</h3>
+                <div id="all-products-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <!-- Все товары будут загружены сюда -->
+                </div>
+                <p id="all-products-empty" class="text-center text-gray-500 mt-6 hidden">В каталоге пока нет товаров.</p>
+            </div>
+
+            <div id="products-loading" class="text-center mt-6 hidden">
+                <div class="spinner mx-auto"></div>
+                <p class="mt-2 text-gray-600">Загрузка товаров...</p>
+            </div>
+        </div>
+
+        <!-- Модальное окно Добавления/Редактирования Товара -->
+        <div id="product-modal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+            <div class="relative top-20 mx-auto p-6 border w-96 shadow-2xl rounded-xl bg-white">
+                <h3 id="modal-title" class="text-xl font-bold mb-4 text-indigo-600">Добавить новый товар</h3>
+                <form id="product-form" onsubmit="event.preventDefault()" class="space-y-4"> 
+                    <input type="hidden" id="product-id-hidden">
+                    <input type="text" id="product-name" placeholder="Название" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                    <textarea id="product-description" placeholder="Описание" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                    
+                    <select id="product-category-id" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="" disabled selected>Выберите категорию</option>
+                    </select>
+
+                    <input type="number" id="product-price" placeholder="Цена" required min="0.01" step="0.01" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                    
+                    <button type="submit" id="modal-submit-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-md transition duration-300">Создать товар</button>
+                </form>
+                <button onclick="hideProductModal()" class="mt-4 w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 rounded-lg">Отмена</button>
+            </div>
+        </div>
+
+        <!-- Модальное окно Добавления Категории -->
+        <div id="category-add-modal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+            <div class="relative top-20 mx-auto p-6 border w-96 shadow-2xl rounded-xl bg-white">
+                <h3 class="text-xl font-bold mb-4 text-green-600">Добавить новую категорию</h3>
+                <form id="category-add-form" onsubmit="event.preventDefault(); handleAddCategory(event);" class="space-y-4"> 
+                    <input type="text" id="category-name-input" placeholder="Название категории" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500">
+                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg shadow-md transition duration-300">Создать категорию</button>
+                </form>
+                <button onclick="document.getElementById('category-add-modal').classList.add('hidden')" class="mt-4 w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 rounded-lg">Отмена</button>
+            </div>
+        </div>
+        
+        <!-- Модальное окно Редактирования Категории -->
+        <div id="category-edit-modal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+            <div class="relative top-20 mx-auto p-6 border w-96 shadow-2xl rounded-xl bg-white">
+                <h3 id="category-edit-title" class="text-xl font-bold mb-4 text-blue-600">Редактировать категорию</h3>
+                <form id="category-edit-form" onsubmit="event.preventDefault(); handleEditCategorySubmit(event);" class="space-y-4"> 
+                    <input type="hidden" id="category-edit-id">
+                    <input type="text" id="category-edit-name" placeholder="Новое название категории" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-md transition duration-300">Сохранить</button>
+                </form>
+                <button onclick="document.getElementById('category-edit-modal').classList.add('hidden')" class="mt-4 w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 rounded-lg">Отмена</button>
+            </div>
+        </div>
+
+        <!-- Модальное окно подтверждения удаления -->
+        <div id="confirm-delete-modal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+            <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-xl bg-white text-center">
+                <h3 class="text-xl font-bold mb-4 text-red-600">Подтвердите удаление</h3>
+                <p class="mb-6 text-gray-700"><span id="delete-warning-text">Вы уверены, что хотите удалить <span id="delete-item-type" class="font-semibold"></span> "<span id="delete-item-name" class="font-semibold"></span>"?</span></p>
+                <div class="flex justify-around space-x-4">
+                    <button id="confirm-delete-btn" 
+                            class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded-lg transition duration-300">
+                        Да, удалить
+                    </button>
+                    <button onclick="document.getElementById('confirm-delete-modal').classList.add('hidden')" 
+                            class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 rounded-lg transition duration-300">
+                        Отмена
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <script>
-        // --- КОНФИГУРАЦИЯ И ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ---
-        const BASE_URL = 'http://127.0.0.1:8000';
-        const messageBox = document.getElementById('message-box');
+    <script type="module">
+        // Глобальные переменные
+        let currentUser = null;
+        const API_URL = "http://localhost:8000"; 
+        const TOKEN_KEY = 'authToken'; 
+        const userCache = {}; // Кэш для имен пользователей
+        let allProducts = []; // Все загруженные товары
+        let categories = []; // Все загруженные категории
 
-        let currentUserId = null; 
+        // --- УТИЛИТЫ UI ---
 
-        window.onload = function() {
-            const storedToken = localStorage.getItem('authToken');
-            if (storedToken) {
-                fetchCurrentUser().then(() => {
-                    toggleView('catalog');
-                    readProducts();
-                });
+        const showMessage = (text, isError = false) => {
+            const messageArea = document.getElementById('message-area');
+            messageArea.innerHTML = `<div class="p-3 rounded-lg font-medium shadow-md ${isError ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'}">${text}</div>`;
+            setTimeout(() => {
+                messageArea.innerHTML = '';
+            }, 5000);
+        };
+
+        const setAuthToken = (token) => localStorage.setItem(TOKEN_KEY, token);
+        const getAuthToken = () => localStorage.getItem(TOKEN_KEY);
+        const removeAuthToken = () => localStorage.removeItem(TOKEN_KEY);
+        
+        // --- ЛОГИКА ВКЛАДОК ---
+        window.showAuthTab = (tabName) => {
+            const loginBtn = document.getElementById('tab-login-btn');
+            const registerBtn = document.getElementById('tab-register-btn');
+            const loginContent = document.getElementById('tab-login-content');
+            const registerContent = document.getElementById('tab-register-content');
+
+            const resetTabs = () => {
+                [loginBtn, registerBtn].forEach(btn => 
+                    btn.classList.remove('tab-active', 'text-indigo-700', 'border-indigo-500')
+                );
+                [loginContent, registerContent].forEach(content => content.classList.add('hidden'));
+            };
+
+            resetTabs();
+
+            if (tabName === 'login') {
+                loginBtn.classList.add('tab-active', 'text-indigo-700', 'border-indigo-500');
+                loginContent.classList.remove('hidden');
             } else {
-                toggleView('auth');
-                toggleAuthMode('login'); 
+                registerBtn.classList.add('tab-active', 'text-indigo-700', 'border-indigo-500');
+                registerContent.classList.remove('hidden');
+            }
+        };
+
+
+        const updateUI = (user = null) => {
+            const authForms = document.getElementById('auth-forms');
+            const catalogView = document.getElementById('catalog-view');
+            const userInfoSpan = document.getElementById('user-info');
+            const logoutBtn = document.getElementById('logout-btn');
+            
+            const addProductBtn = document.getElementById('add-product-btn');
+            const myProductsContainerWrapper = document.getElementById('my-products-wrapper'); 
+            const manageCategoryBtn = document.getElementById('manage-category-btn'); 
+            const categoryAdminView = document.getElementById('category-admin-view');
+
+            if (user) {
+                currentUser = user;
+                authForms.classList.add('hidden');
+                catalogView.classList.remove('hidden');
+                logoutBtn.classList.remove('hidden');
+                
+                userCache[user.id] = user.name; 
+
+                const roleName = user.role ? user.role.name.toLowerCase() : 'unknown';
+                const roleDisplay = user.role ? ` (${user.role.name})` : ''; 
+                
+                userInfoSpan.textContent = `${user.name}${roleDisplay}`;
+
+                const isSeller = roleName === 'seller';
+                const isAdmin = roleName === 'admin'; 
+
+                if (isSeller) {
+                    addProductBtn.classList.remove('hidden');
+                    myProductsContainerWrapper.classList.remove('hidden'); 
+                } else {
+                    addProductBtn.classList.add('hidden');
+                    myProductsContainerWrapper.classList.add('hidden');
+                }
+                
+                if (isAdmin) {
+                    manageCategoryBtn.classList.remove('hidden');
+                } else {
+                    manageCategoryBtn.classList.add('hidden');
+                }
+                
+                document.getElementById('all-products-wrapper').classList.remove('hidden');
+                categoryAdminView.classList.add('hidden');
+
+                // Загружаем данные
+                fetchInitialData();
+
+            } else {
+                currentUser = null;
+                authForms.classList.remove('hidden');
+                catalogView.classList.add('hidden');
+                logoutBtn.classList.add('hidden');
+                
+                addProductBtn.classList.add('hidden');
+                myProductsContainerWrapper.classList.add('hidden');
+                manageCategoryBtn.classList.add('hidden'); 
+                categoryAdminView.classList.add('hidden');
+                
+                userInfoSpan.textContent = ''; 
+                
+                window.showAuthTab('login');
             }
         };
         
-        // --- Управление Отображением и Утилиты ---
-
-        function toggleView(viewName) {
-            document.getElementById('auth-view').classList.add('hidden');
-            document.getElementById('catalog-view').classList.add('hidden');
+        /**
+         * Загружает категории и товары одновременно.
+         */
+        const fetchInitialData = async () => {
+            await fetchCategories(); // Сначала категории, чтобы они были доступны для товаров
+            await fetchProducts();
             
-            if (viewName === 'auth') {
-                document.getElementById('auth-view').classList.remove('hidden');
-                // Для Auth: центрирование по вертикали и горизонтали
-                document.body.classList.remove('items-start');
-                document.body.classList.add('items-center');
-            } else if (viewName === 'catalog') {
-                document.getElementById('catalog-view').classList.remove('hidden');
-                // Для Catalog: выравнивание по верхнему краю (для прокрутки)
-                document.body.classList.remove('items-center');
-                document.body.classList.add('items-start');
+            // Если это админ, отображаем таблицу категорий
+            if (currentUser && currentUser.role && currentUser.role.name.toLowerCase() === 'admin') {
+                renderCategoryAdminTable();
             }
-            // Горизонтальное центрирование (justify-content: center) остается в body CSS
         }
+        
+        // --- UI КОНТРОЛЛЕРЫ ДЛЯ АДМИНА ---
 
-        function toggleAuthMode(mode) {
-            currentAuthMode = mode;
-            const loginForm = document.getElementById('login-form');
-            const registerForm = document.getElementById('register-form');
-            const loginTab = document.getElementById('login-tab');
-            const registerTab = document.getElementById('register-tab');
-
-            if (mode === 'login') {
-                loginForm.classList.remove('hidden');
-                registerForm.classList.add('hidden');
-                loginTab.classList.add('border-indigo-600', 'text-indigo-600');
-                loginTab.classList.remove('border-transparent', 'text-gray-500');
-                registerTab.classList.remove('border-indigo-600', 'text-indigo-600');
-                registerTab.classList.add('border-transparent', 'text-gray-500');
+        window.showCategoryAdminView = () => {
+            if (currentUser && currentUser.role && currentUser.role.name.toLowerCase() === 'admin') {
+                document.getElementById('all-products-wrapper').classList.add('hidden');
+                document.getElementById('my-products-wrapper').classList.add('hidden');
+                document.getElementById('category-admin-view').classList.remove('hidden');
+                document.getElementById('manage-category-btn').classList.add('hidden');
+                document.getElementById('add-product-btn').classList.add('hidden');
+                renderCategoryAdminTable();
             } else {
-                loginForm.classList.add('hidden');
-                registerForm.classList.remove('hidden');
-                registerTab.classList.add('border-indigo-600', 'text-indigo-600');
-                registerTab.classList.remove('border-transparent', 'text-gray-500');
-                loginTab.classList.remove('border-indigo-600', 'text-indigo-600');
-                loginTab.classList.add('border-transparent', 'text-gray-500');
+                showMessage("У вас нет прав администратора для просмотра этой страницы.", true);
             }
         }
 
-        function showMessage(msg, type = 'info') {
-            const colors = {
-                success: 'bg-green-100 text-green-800 border-green-400',
-                error: 'bg-red-100 text-red-800 border-red-400',
-                info: 'bg-blue-100 text-blue-800 border-blue-400'
+        window.hideCategoryAdminView = () => {
+            document.getElementById('category-admin-view').classList.add('hidden');
+            document.getElementById('all-products-wrapper').classList.remove('hidden');
+            document.getElementById('manage-category-btn').classList.remove('hidden');
+            
+            if (currentUser && currentUser.role && currentUser.role.name.toLowerCase() === 'seller') {
+                document.getElementById('my-products-wrapper').classList.remove('hidden');
+                document.getElementById('add-product-btn').classList.remove('hidden');
+            }
+        }
+
+        // --- API & AUTH LOGIC ---
+
+        const apiFetch = async (endpoint, options = {}, overrideToken = null) => {
+            const token = overrideToken || getAuthToken(); 
+            const headers = {
+                'Content-Type': 'application/json',
+                ...(options.headers || {})
             };
-            messageBox.innerHTML = `
-                <div class="p-3 border rounded-lg shadow-md ${colors[type]}">
-                    ${msg}
-                </div>
-            `;
-            messageBox.style.opacity = '1';
 
-            setTimeout(() => {
-                messageBox.style.opacity = '0';
-            }, 3000);
-        }
-
-        function formatErrorDetail(detail) {
-            if (Array.isArray(detail)) {
-                return detail.map(err => {
-                    const loc = err.loc.slice(1).join('.'); 
-                    return `[${loc}]: ${err.msg}`;
-                }).join('; ');
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
             }
-            return detail; 
-        }
-
-        function getAuthHeaders() {
-            const token = localStorage.getItem('authToken');
-            if (!token) {
-                showMessage('Ошибка: Вы не авторизованы. Войдите в систему.', 'error');
-                return null;
+            
+            if (endpoint === "/users/me" && !token) {
+                 return; 
             }
-            return {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            };
-        }
-
-        // --- ФУНКЦИИ АУТЕНТИФИКАЦИИ И ПРОФИЛЯ ---
-
-        async function fetchCurrentUser() {
-            const headers = getAuthHeaders();
-            if (!headers) return;
 
             try {
-                const response = await fetch(BASE_URL + '/users/me', {
-                    method: 'GET',
+                const response = await fetch(`${API_URL}${endpoint}`, {
+                    ...options,
                     headers: headers
                 });
 
-                const user = await response.json();
-
                 if (response.ok) {
-                    currentUserId = user.id; 
-                    document.getElementById('user-info').textContent = `Привет, ${user.name}! (ID: ${user.id})`;
+                    if (endpoint.includes("/auth/jwt/token") && options.headers['Content-Type'] === 'application/x-www-form-urlencoded') {
+                        return await response.json();
+                    }
+                    if (response.status === 204 || options.method === 'DELETE') {
+                         return null;
+                    }
+                    return await response.json();
+                }
+
+                let errorData;
+                try {
+                    errorData = await response.json();
+                } catch (e) {
+                    errorData = { 
+                        detail: `Ошибка ${response.status}: ${response.statusText}` 
+                    };
+                }
+
+                if (response.status === 401) {
+                    if (getAuthToken() && endpoint !== "/auth/jwt/token") {
+                        removeAuthToken(); 
+                        updateUI(null); 
+                        showMessage("Ваша сессия истекла или токен недействителен. Пожалуйста, войдите снова.", true);
+                    }
+                    throw new Error("Неверный логин или пароль.");
+                }
+                
+                let errorMessage = errorData.detail || `Сетевая ошибка: ${response.status} ${response.statusText}`;
+
+                if (response.status === 422 && Array.isArray(errorData.detail)) {
+                    if (endpoint === "/users/me") {
+                        errorMessage = "Ошибка авторизации. Токен не предоставлен или недействителен. Попробуйте войти снова.";
+                    } else {
+                        errorMessage = "Ошибка валидации данных: " + errorData.detail.map(err => 
+                            `${err.loc.join('.')}: ${err.msg}`
+                        ).join('; ');
+                    }
+                }
+                
+                throw new Error(errorMessage);
+
+            } catch (error) {
+                if (endpoint === "/users/me" && !getAuthToken()) return; 
+
+                showMessage(`Сетевая ошибка при запросе ${endpoint}: ${error.message}`, true);
+                throw error;
+            }
+        };
+
+        const fetchUserProfile = async (token = null) => {
+            const currentToken = token || getAuthToken(); 
+            
+            if (!currentToken) {
+                updateUI(null);
+                return;
+            }
+
+            try {
+                const user = await apiFetch("/users/me", {}, currentToken); 
+                
+                if (user) {
+                    updateUI(user);
                 } else {
-                    showMessage(`Ошибка получения профиля (${response.status}): ${user.detail || 'Токен недействителен или истек.'}`, 'error');
-                    handleLogout();
+                    removeAuthToken();
+                    updateUI(null);
                 }
             } catch (error) {
-                showMessage(`Сетевая ошибка при получении профиля: ${error.message}`, 'error');
+                updateUI(null);
             }
-        }
-
-
-        async function handleLogin(event) {
+        };
+        
+        window.logout = () => {
+            removeAuthToken();
+            currentUser = null;
+            for (const key in userCache) {
+                if (userCache.hasOwnProperty(key)) {
+                    delete userCache[key];
+                }
+            }
+            updateUI(null);
+            showMessage('Вы успешно вышли из системы.', false);
+        };
+        
+        window.handleLogin = async (event) => {
             event.preventDefault();
             const email = document.getElementById('login-email').value;
             const password = document.getElementById('login-password').value;
-
-            const formBody = new URLSearchParams({
-                username: email, 
-                password: password
-            });
-
+            
+            removeAuthToken(); 
+            updateUI(null);
+            
             try {
-                const response = await fetch(BASE_URL + '/token/', {
+                const data = await apiFetch("/auth/jwt/token", {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
+                        'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: formBody.toString()
+                    body: new URLSearchParams({
+                        username: email,
+                        password: password
+                    }).toString()
                 });
 
-                const result = await response.json();
-
-                if (response.ok) {
-                    localStorage.setItem('authToken', result.access_token);
-                    showMessage('Успешный вход! Добро пожаловать.', 'success');
-                    
-                    await fetchCurrentUser();
-                    toggleView('catalog');
-                    readProducts();
+                if (data && data.access_token) {
+                    const newToken = data.access_token;
+                    setAuthToken(newToken);
+                    showMessage('Успешный вход!', false);
+                    await fetchUserProfile(newToken); 
                 } else {
-                    showMessage(`Ошибка входа (${response.status}): ${result.detail || 'Неверный логин или пароль'}`, 'error');
+                    showMessage('Вход не удался. Неизвестный ответ сервера.', true);
                 }
             } catch (error) {
-                showMessage(`Сетевая ошибка при входе: ${error.message}`, 'error');
+                // Ошибка уже выведена в apiFetch
             }
-        }
+        };
 
-        async function handleRegister(event) {
+        window.handleRegister = async (event) => {
             event.preventDefault();
+            const name = document.getElementById('register-name').value;
             const email = document.getElementById('register-email').value;
-            const username = document.getElementById('register-username').value; 
             const password = document.getElementById('register-password').value;
-
-            if (password.length < 3) { 
-                 showMessage(`Ошибка: Пароль должен быть не менее 3 символов.`, 'error');
-                 return;
-            }
-
-            const data = {
-                email: email,
-                name: username, 
-                password: password
-            };
+            const role = document.getElementById('register-role').value;
 
             try {
-                const response = await fetch(BASE_URL + '/users/', {
+                const user = await apiFetch("/users/", {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
+                    body: JSON.stringify({ name, email, password, role }),
                 });
 
-                const result = await response.json();
-
-                if (response.ok) {
-                    showMessage(`Пользователь ${result.name} (${result.email}) успешно зарегистрирован!`, 'success');
-                    document.getElementById('register-form').reset();
-                    toggleAuthMode('login'); 
-                } else {
-                    const errorMsg = formatErrorDetail(result.detail);
-                    showMessage(`Ошибка регистрации (${response.status}): ${errorMsg || 'Пользователь с таким email уже существует.'}`, 'error');
-                }
+                showMessage(`Пользователь ${user.name} успешно зарегистрирован! Теперь войдите.`, false);
+                window.showAuthTab('login');
             } catch (error) {
-                showMessage(`Сетевая ошибка при регистрации: ${error.message}`, 'error');
+                // Сообщение об ошибке уже выведено в apiFetch
             }
-        }
+        };
 
-        function handleLogout() {
-            localStorage.removeItem('authToken');
-            currentUserId = null; 
-            showMessage('Вы вышли из системы.', 'info');
-            toggleView('auth');
-            toggleAuthMode('login');
-        }
+        // --- ЛОГИКА КАТЕГОРИЙ ---
+        
+        /**
+         * Получает список категорий с бэкенда и заполняет выпадающий список.
+         */
+        window.fetchCategories = async () => {
+            const categorySelect = document.getElementById('product-category-id');
+            const initialOption = categorySelect.querySelector('option[value=""]');
+            
+            if (initialOption) initialOption.textContent = 'Загрузка категорий...';
 
-        // --- CRUD ФУНКЦИИ ---
-
-        // POST /products/
-        async function createProduct(event) {
-            event.preventDefault();
-            const headers = getAuthHeaders();
-            if (!headers) return;
-
-            const data = {
-                name: document.getElementById('create-name').value,
-                price: parseFloat(document.getElementById('create-price').value),
-                category_id: parseInt(document.getElementById('create-category-id').value),
-                description: document.getElementById('create-description').value || null 
-            };
+            categorySelect.innerHTML = initialOption ? initialOption.outerHTML : '<option value="" disabled selected>Выберите категорию</option>'; 
             
             try {
-                const response = await fetch(BASE_URL + '/products/', {
-                    method: 'POST',
-                    headers: headers,
-                    body: JSON.stringify(data)
+                categories = await apiFetch("/categories/"); 
+
+                const currentInitialOption = categorySelect.querySelector('option[value=""]');
+                if (currentInitialOption) {
+                    currentInitialOption.textContent = categories.length > 0 ? 'Выберите категорию' : 'Нет доступных категорий';
+                }
+
+                categories.forEach(category => {
+                    const option = document.createElement('option');
+                    option.value = category.id;
+                    option.textContent = category.name;
+                    categorySelect.appendChild(option);
                 });
 
-                const result = await response.json();
-
-                if (response.ok) {
-                    showMessage(`Продукт #${result.id} создан: ${result.name}`, 'success');
-                    document.getElementById('create-form').reset();
-                    readProducts(); 
-                } else {
-                    showMessage(`Ошибка POST (${response.status}): ${result.detail || result.error || 'Неизвестная ошибка'}`, 'error');
-                }
             } catch (error) {
-                showMessage(`Сетевая ошибка: ${error.message}`, 'error');
+                const currentInitialOption = categorySelect.querySelector('option[value=""]');
+                if (currentInitialOption) currentInitialOption.textContent = 'Ошибка загрузки категорий';
+                categories = [];
             }
-        }
+        };
+        
+        // --- ЛОГИКА АДМИН-УПРАВЛЕНИЯ КАТЕГОРИЯМИ ---
 
-        // GET /products/ (С КЛИЕНТСКОЙ ФИЛЬТРАЦИЕЙ)
-        async function readProducts() {
-            const listContainer = document.getElementById('product-list');
-            listContainer.innerHTML = '<p class="text-indigo-500 font-medium text-center py-4">Загрузка...</p>';
+        /**
+         * Вычисляет количество товаров в каждой категории (имитация статистики).
+         * В идеале, эту статистику должен предоставлять API.
+         */
+        const calculateProductCounts = () => {
+            const counts = {};
+            allProducts.forEach(product => {
+                const categoryId = product.category_id;
+                counts[categoryId] = (counts[categoryId] || 0) + 1;
+            });
+            return counts;
+        };
+
+        /**
+         * Отрисовывает таблицу категорий для админ-панели с кнопками CRUD и статистикой.
+         */
+        window.renderCategoryAdminTable = () => {
+            const tableBody = document.getElementById('category-table-body');
+            const emptyMessage = document.getElementById('categories-empty');
+            tableBody.innerHTML = '';
+            
+            const productCounts = calculateProductCounts();
+
+            if (categories.length === 0) {
+                emptyMessage.classList.remove('hidden');
+                return;
+            }
+            emptyMessage.classList.add('hidden');
+
+            categories.forEach(category => {
+                const productCount = productCounts[category.id] || 0;
+                
+                const row = tableBody.insertRow();
+                row.className = 'hover:bg-gray-50 transition duration-150';
+
+                // Колонка "Название"
+                row.insertCell().textContent = category.name;
+
+                // Колонка "Товаров" (Статистика)
+                const countCell = row.insertCell();
+                countCell.innerHTML = `
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                        productCount > 0 ? 'bg-indigo-100 text-indigo-800' : 'bg-red-100 text-red-800'
+                    }">
+                        ${productCount}
+                    </span>
+                `;
+
+                // Колонка "Действия"
+                const actionsCell = row.insertCell();
+                actionsCell.className = 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2';
+                
+                // Экранирование для корректной передачи строки в JS
+                const escapedName = category.name.replace(/'/g, "\\'");
+
+                actionsCell.innerHTML = `
+                    <button onclick="showEditCategoryModal(${category.id}, '${escapedName}')"
+                            class="text-blue-600 hover:text-blue-900 p-2 rounded-full hover:bg-blue-100 transition"
+                            title="Редактировать">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-edit"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                    </button>
+                    <button onclick="confirmDeleteCategory(${category.id}, '${escapedName}', ${productCount})"
+                            class="text-red-600 hover:text-red-900 p-2 rounded-full hover:bg-red-100 transition"
+                            title="Удалить">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                    </button>
+                `;
+            });
+        };
+
+        window.showAddCategoryModal = () => {
+            document.getElementById('category-add-modal').classList.remove('hidden');
+            document.getElementById('category-add-form').reset();
+            document.getElementById('category-name-input').focus();
+        };
+
+        window.handleAddCategory = async (event) => {
+            event.preventDefault();
+            const name = document.getElementById('category-name-input').value.trim();
+            
+            if (!name) return;
 
             try {
-                const response = await fetch(BASE_URL + '/products/');
-                let products = await response.json();
+                const newCategory = await apiFetch("/categories/", {
+                    method: 'POST', 
+                    body: JSON.stringify({ name }), 
+                });
+                
+                showMessage(`Категория "${newCategory.name}" успешно добавлена!`, false);
+                document.getElementById('category-add-modal').classList.add('hidden');
+                
+                // Обновляем данные
+                await fetchCategories(); 
+                renderCategoryAdminTable();
 
-                if (response.ok) {
-                    if (currentUserId !== null) {
-                        products = products.filter(p => p.owner_id === currentUserId);
-                    }
+            } catch (error) {
+                // Ошибка уже показана
+            }
+        };
+        
+        window.showEditCategoryModal = (id, name) => {
+            document.getElementById('category-edit-id').value = id;
+            document.getElementById('category-edit-name').value = name;
+            document.getElementById('category-edit-title').textContent = `Редактировать: ${name}`;
+            document.getElementById('category-edit-modal').classList.remove('hidden');
+            document.getElementById('category-edit-name').focus();
+        };
+        
+        window.handleEditCategorySubmit = async (event) => {
+            event.preventDefault();
+            const id = document.getElementById('category-edit-id').value; // ID всегда должен быть строкой, как приходит с API
+            const newName = document.getElementById('category-edit-name').value.trim();
 
-                    if (products.length === 0) {
-                        listContainer.innerHTML = '<p class="text-gray-500 text-center py-4">У вас пока нет созданных продуктов.</p>';
-                        return;
-                    }
+            if (!newName) return;
 
-                    listContainer.innerHTML = products.map(p => {
-                        const isOwner = p.owner_id === currentUserId;
-                        const actionButtons = isOwner ? `
-                            <button onclick="toggleEditMode(${p.id})"
-                                    class="px-3 py-1 text-sm bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition shadow-md">
-                                Редактировать
-                            </button>
-                            <button onclick="deleteProduct(${p.id})"
-                                    class="px-3 py-1 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 transition shadow-md">
-                                Удалить
-                            </button>
-                        ` : '';
+            try {
+                await apiFetch(`/categories/${id}`, { 
+                    method: 'PUT', 
+                    body: JSON.stringify({ name: newName }), 
+                });
+                
+                showMessage(`Категория обновлена до "${newName}"!`, false);
+                document.getElementById('category-edit-modal').classList.add('hidden');
+                
+                await fetchCategories();
+                renderCategoryAdminTable();
+            } catch (error) {
+                // Ошибка уже показана
+            }
+        };
 
-                        return `
-                            <div id="product-card-${p.id}" class="product-card p-4 bg-indigo-50 rounded-lg shadow-md border border-indigo-100">
-                                
-                                <!-- Режим Отображения (Display Mode) -->
-                                <div id="display-mode-${p.id}">
-                                    <div class="flex justify-between items-center mb-2">
-                                        <span class="text-xl font-bold text-indigo-800">${p.name} (#${p.id})</span>
-                                        <span class="text-2xl font-extrabold text-green-700">${p.price.toFixed(2)} ₽</span>
-                                    </div>
-                                    <p class="text-sm text-gray-700">
-                                        Категория: <strong>${p.category.name}</strong> (ID: ${p.category_id})
-                                    </p>
-                                    <p class="text-xs text-gray-500 mt-2">
-                                        Владелец: ${p.owner_id} | ${p.description || 'Нет описания'}
-                                    </p>
+        window.confirmDeleteCategory = (id, name, productCount) => {
+            const modal = document.getElementById('confirm-delete-modal');
+            const warningTextSpan = document.getElementById('delete-warning-text');
+            document.getElementById('delete-item-type').textContent = 'категорию';
+            document.getElementById('delete-item-name').textContent = name;
+            
+            let warning = '';
+            if (productCount > 0) {
+                 warning = `<p class="text-red-500 font-bold mt-2">ВНИМАНИЕ: В этой категории ${productCount} товаров. Они останутся без категории или будут удалены на сервере.</p>`;
+            }
+            
+            warningTextSpan.innerHTML = `Вы уверены, что хотите удалить категорию "${name}"? ${warning}`;
 
-                                    <div class="mt-4 pt-3 border-t border-indigo-200 flex justify-end space-x-3">
-                                        ${actionButtons}
-                                    </div>
-                                </div>
+            const confirmBtn = document.getElementById('confirm-delete-btn');
+            // Передаем ID как есть (строкой или числом, в зависимости от API)
+            confirmBtn.onclick = () => handleDeleteCategory(id); 
+            
+            modal.classList.remove('hidden');
+        };
 
-                                <!-- Режим Редактирования (Edit Mode) - Скрыт по умолчанию -->
-                                <div id="edit-mode-${p.id}" class="hidden">
-                                    <form id="update-form-${p.id}" onsubmit="updateProduct(event, ${p.id})">
-                                        <div class="space-y-3">
-                                            <input type="text" id="edit-name-${p.id}" placeholder="Название" value="${p.name}"
-                                                class="w-full p-2 border border-gray-300 rounded-lg">
-                                            <div class="grid grid-cols-2 gap-3">
-                                                <input type="number" id="edit-price-${p.id}" placeholder="Цена" value="${p.price}" step="0.01"
-                                                    class="w-full p-2 border border-gray-300 rounded-lg">
-                                                <input type="number" id="edit-category-id-${p.id}" placeholder="ID Категории" value="${p.category_id}"
-                                                    class="w-full p-2 border border-gray-300 rounded-lg">
-                                            </div>
-                                            <textarea id="edit-description-${p.id}" placeholder="Описание"
-                                                class="w-full p-2 border border-gray-300 rounded-lg h-16 resize-none">${p.description || ''}</textarea>
-                                        </div>
-                                        <div class="mt-4 flex justify-end space-x-3">
-                                            <button type="button" onclick="toggleEditMode(${p.id})"
-                                                    class="px-3 py-2 text-sm bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition">
-                                                Отмена
-                                            </button>
-                                            <button type="submit"
-                                                    class="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-md">
-                                                Сохранить (PUT)
-                                            </button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        `;
-                    }).join('');
-                } else {
-                    listContainer.innerHTML = `<p class="text-red-500 text-center py-4">Ошибка GET (${response.status}): ${products.detail || 'Неизвестная ошибка'}</p>`;
+        window.handleDeleteCategory = async (id) => {
+            try {
+                await apiFetch(`/categories/${id}`, { 
+                    method: 'DELETE', 
+                });
+                
+                showMessage(`Категория успешно удалена!`, false);
+                document.getElementById('confirm-delete-modal').classList.add('hidden');
+                
+                await fetchCategories();
+                renderCategoryAdminTable();
+                fetchProducts(); // Обновить список товаров, чтобы учесть удаление категории
+            } catch (error) {
+                // Ошибка уже показана
+            }
+        };
+
+        // --- ЛОГИКА ТОВАРОВ ---
+
+        const fetchAndCacheUserName = async (userId) => {
+            if (userCache[userId] && userCache[userId] !== `ID: ${userId}`) {
+                return userCache[userId];
+            }
+            
+            try {
+                // Обратите внимание: API /users/me возвращает имя,
+                // /users/{id} должен возвращать имя пользователя по ID.
+                const user = await apiFetch(`/users/${userId}`, { method: 'GET' }, null); 
+                if (user && user.name) {
+                    userCache[userId] = user.name;
+                    return user.name;
                 }
             } catch (error) {
-                listContainer.innerHTML = `<p class="text-red-500 text-center py-4">Сетевая ошибка при загрузке: ${error.message}</p>`;
+                // Игнорируем ошибку 422, если ID невалиден, и оставляем ID
+                userCache[userId] = `ID: ${userId}`; 
             }
-        }
-        
-        function toggleEditMode(productId) {
-            const displayMode = document.getElementById(`display-mode-${productId}`);
-            const editMode = document.getElementById(`edit-mode-${productId}`);
+            return userCache[userId];
+        };
 
-            if (displayMode.classList.contains('hidden')) {
-                displayMode.classList.remove('hidden');
-                editMode.classList.add('hidden');
+        const generateProductCard = (product, isOwner, allowActions) => {
+            const category = categories.find(c => c.id === product.category_id);
+            const categoryName = category ? category.name : 'Неизвестная'; 
+            
+            const cardBorderClass = (isOwner && allowActions) ? 'border-indigo-400 shadow-lg' : 'border-gray-100';
+
+            const actionsHtml = (isOwner && allowActions) ? `
+                <div class="flex space-x-2 mt-3">
+                    <button onclick="showEditProductForm(${product.id})" 
+                            class="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-2 px-3 rounded-lg shadow-md transition duration-300 text-sm">
+                        Редактировать
+                    </button>
+                    <button onclick="confirmDeleteProduct(${product.id}, '${product.name.replace(/'/g, "\\'")}')" 
+                            class="flex-1 bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-3 rounded-lg shadow-md transition duration-300 text-sm">
+                        Удалить
+                    </button>
+                </div>
+            ` : '';
+
+            const ownerName = userCache[product.owner_id] || `ID: ${product.owner_id}`;
+            
+            const ownerDisplay = userCache[product.owner_id] && !userCache[product.owner_id].startsWith('ID:')
+                ? `<span class="font-semibold text-gray-700">${ownerName}</span>` 
+                : `<span class="text-gray-400">Загрузка... (${ownerName})</span>`;
+
+
+            return `
+                <div class="bg-white p-5 rounded-xl shadow-md border ${cardBorderClass} flex flex-col justify-between hover:shadow-lg transition duration-300">
+                    <div>
+                        <!-- Отображение названия категории -->
+                        <span class="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-700 mb-2">${categoryName}</span>
+                        <h3 class="text-lg font-bold text-gray-800 line-clamp-2">${product.name}</h3>
+                        <p class="text-gray-600 mt-2 text-sm line-clamp-3">${product.description}</p>
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-gray-100">
+                        <p class="text-xl font-extrabold text-green-600">${product.price} ₽</p>
+                        
+                        <!-- Выводим Имя продавца (или статус загрузки) -->
+                        <p class="text-sm text-gray-500 mt-1">Продавец: ${ownerDisplay}</p>
+                        
+                        <!-- Действия продавца -->
+                        ${actionsHtml}
+                    </div>
+                </div>
+            `;
+        };
+        
+        window.fetchProducts = async () => {
+            const myProductsList = document.getElementById('my-products-list'); 
+            const allProductsList = document.getElementById('all-products-list');
+            const myProductsEmpty = document.getElementById('my-products-empty');
+            const allProductsEmpty = document.getElementById('all-products-empty');
+            const loadingIndicator = document.getElementById('products-loading');
+            
+            myProductsList.innerHTML = '';
+            allProductsList.innerHTML = '';
+            myProductsEmpty.classList.add('hidden');
+            allProductsEmpty.classList.add('hidden');
+            loadingIndicator.classList.remove('hidden');
+
+            try {
+                allProducts = await apiFetch("/products/");
+                
+                const isSeller = currentUser && currentUser.role && currentUser.role.name.toLowerCase() === 'seller';
+                const currentUserId = currentUser ? currentUser.id : null;
+
+                const uniqueOwnerIds = [...new Set(allProducts.map(p => p.owner_id))];
+                const idsToFetch = uniqueOwnerIds.filter(id => !userCache[id] || userCache[id].startsWith('ID:'));
+
+                if (idsToFetch.length > 0) {
+                    idsToFetch.forEach(id => userCache[id] = `ID: ${id}`);
+                    const fetchPromises = idsToFetch.map(id => fetchAndCacheUserName(id));
+                    
+                    renderProducts(allProducts, isSeller, currentUserId, myProductsList, allProductsList, myProductsEmpty, allProductsEmpty);
+                    
+                    // Дожидаемся загрузки всех имен
+                    await Promise.allSettled(fetchPromises);
+                    
+                    // Повторная отрисовка с обновленными именами
+                    renderProducts(allProducts, isSeller, currentUserId, myProductsList, allProductsList, myProductsEmpty, allProductsEmpty);
+
+                } else {
+                    renderProducts(allProducts, isSeller, currentUserId, myProductsList, allProductsList, myProductsEmpty, allProductsEmpty);
+                }
+                
+                // Обновить админ-таблицу после получения товаров (для статистики)
+                if (currentUser && currentUser.role && currentUser.role.name.toLowerCase() === 'admin') {
+                     renderCategoryAdminTable();
+                }
+
+            } catch (error) {
+                const errorMessage = '<p class="text-center text-red-500 col-span-full">Не удалось загрузить товары.</p>';
+                if (document.getElementById('my-products-wrapper').classList.contains('hidden')) {
+                    allProductsList.innerHTML = errorMessage;
+                } else {
+                    myProductsList.innerHTML = errorMessage;
+                    allProductsList.innerHTML = errorMessage;
+                }
+            } finally {
+                loadingIndicator.classList.add('hidden');
+            }
+        };
+        
+        const renderProducts = (products, isSeller, currentUserId, myProductsList, allProductsList, myProductsEmpty, allProductsEmpty) => {
+            let myProductsHtml = '';
+            let allProductsHtml = '';
+            const myProducts = [];
+            
+            products.forEach(product => {
+                const isOwner = isSeller && currentUserId === product.owner_id;
+                
+                allProductsHtml += generateProductCard(product, isOwner, false); 
+                
+                if (isSeller && isOwner) {
+                    myProducts.push(product); 
+                    myProductsHtml += generateProductCard(product, isOwner, true);
+                }
+            });
+            
+            if (isSeller) {
+                if (myProducts.length > 0) {
+                    myProductsList.innerHTML = myProductsHtml;
+                    myProductsEmpty.classList.add('hidden');
+                } else {
+                    myProductsList.innerHTML = '';
+                    myProductsEmpty.classList.remove('hidden');
+                }
+            }
+
+            if (products.length > 0) {
+                allProductsList.innerHTML = allProductsHtml;
+                allProductsEmpty.classList.add('hidden');
             } else {
-                displayMode.classList.add('hidden');
-                editMode.classList.remove('hidden');
-            }
-        }
-
-        // PUT /products/{id}
-        async function updateProduct(event, productId) {
-            event.preventDefault();
-            const headers = getAuthHeaders();
-            if (!headers) return;
-            
-            const data = {
-                name: document.getElementById(`edit-name-${productId}`).value,
-                price: parseFloat(document.getElementById(`edit-price-${productId}`).value),
-                category_id: parseInt(document.getElementById(`edit-category-id-${productId}`).value),
-                description: document.getElementById(`edit-description-${productId}`).value || null 
-            };
-            
-            try {
-                const response = await fetch(`${BASE_URL}/products/${productId}`, {
-                    method: 'PUT',
-                    headers: headers,
-                    body: JSON.stringify(data)
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                    showMessage(`Продукт #${productId} успешно ОБНОВЛЕН.`, 'success');
-                    toggleEditMode(productId); 
-                    readProducts();
-                } else {
-                    showMessage(`Ошибка PUT (${response.status}): ${result.detail || 'Неизвестная ошибка'}`, 'error');
-                }
-            } catch (error) {
-                showMessage(`Сетевая ошибка при обновлении: ${error.message}`, 'error');
+                allProductsList.innerHTML = '';
+                allProductsEmpty.classList.remove('hidden');
             }
         }
         
-        // DELETE /products/{id}
-        async function deleteProduct(productId) {
-            const headers = getAuthHeaders();
-            if (!headers) return;
-            
-            console.log(`Пробуем удалить продукт с ID ${productId}.`);
-            
-            try {
-                const response = await fetch(`${BASE_URL}/products/${productId}`, {
-                    method: 'DELETE',
-                    headers: headers
-                });
+        // --- ЛОГИКА МОДАЛЬНЫХ ОКОН ПРОДУКТА (ID: int) ---
 
-                if (response.status === 204) {
-                    showMessage(`Продукт #${productId} успешно УДАЛЕН.`, 'success');
-                    readProducts();
+        window.showProductModal = async (isEdit = false, productData = {}) => {
+            const modal = document.getElementById('product-modal');
+            const form = document.getElementById('product-form');
+            const title = document.getElementById('modal-title');
+            const submitBtn = document.getElementById('modal-submit-btn');
+            const idInput = document.getElementById('product-id-hidden');
+            const categorySelect = document.getElementById('product-category-id');
+
+            form.reset(); 
+            idInput.value = '';
+
+            await window.fetchCategories(); 
+
+            if (isEdit && productData.id) {
+                title.textContent = `Редактировать товар: ${productData.name}`;
+                title.classList.replace('text-indigo-600', 'text-yellow-600');
+                submitBtn.textContent = 'Сохранить изменения';
+                submitBtn.className = submitBtn.className.replace('bg-indigo-600', 'bg-yellow-600').replace('hover:bg-indigo-700', 'hover:bg-yellow-700');
+                form.onsubmit = (e) => handleEditProduct(e, productData.id);
+
+                idInput.value = productData.id;
+                document.getElementById('product-name').value = productData.name;
+                document.getElementById('product-description').value = productData.description;
+                document.getElementById('product-price').value = productData.price;
+                categorySelect.value = productData.category_id; // Категория_id должна соответствовать значению опции
+
+            } else {
+                title.textContent = 'Добавить новый товар';
+                title.classList.replace('text-yellow-600', 'text-indigo-600');
+                submitBtn.textContent = 'Создать товар';
+                submitBtn.className = submitBtn.className.replace('bg-yellow-600', 'bg-indigo-600').replace('hover:bg-yellow-700', 'hover:bg-indigo-700');
+                form.onsubmit = (e) => handleAddProduct(e);
+            }
+
+            modal.classList.remove('hidden');
+        };
+        
+        window.showAddProductForm = () => showProductModal(false);
+
+        window.showEditProductForm = async (productId) => {
+            try {
+                // Ищем товар в локальном кэше
+                const product = allProducts.find(p => p.id === productId);
+                if (product) {
+                    showProductModal(true, product);
                 } else {
-                    const result = await response.json();
-                    showMessage(`Ошибка DELETE (${response.status}): ${result.detail || 'Неизвестная ошибка'}`, 'error');
+                     showMessage(`Товар ID:${productId} не найден в кэше.`, true);
                 }
             } catch (error) {
-                showMessage(`Сетевая ошибка при удалении: ${error.message}`, 'error');
+                // Ошибка уже показана в apiFetch
             }
-        }
+        };
+
+        window.hideProductModal = () => {
+            document.getElementById('product-modal').classList.add('hidden');
+            document.getElementById('product-form').reset();
+        };
+
+        window.handleAddProduct = async (event) => {
+            event.preventDefault();
+            const data = {
+                name: document.getElementById('product-name').value,
+                description: document.getElementById('product-description').value,
+                // Важно: category_id должен быть числом, если API его ожидает
+                category_id: parseInt(document.getElementById('product-category-id').value), 
+                price: parseFloat(document.getElementById('product-price').value),
+                is_active: true 
+            };
+
+            try {
+                const newProduct = await apiFetch("/products/", { 
+                    method: 'POST', 
+                    body: JSON.stringify(data), 
+                });
+                showMessage(`Товар "${newProduct.name}" успешно добавлен!`, false);
+                hideProductModal();
+                fetchProducts(); 
+            } catch (error) {
+                // Ошибка уже показана
+            }
+        };
+
+        window.handleEditProduct = async (event, productId) => {
+            event.preventDefault();
+            const data = {
+                name: document.getElementById('product-name').value,
+                description: document.getElementById('product-description').value,
+                category_id: parseInt(document.getElementById('product-category-id').value),
+                price: parseFloat(document.getElementById('product-price').value),
+            };
+            
+            try {
+                const updatedProduct = await apiFetch(`/products/${productId}`, { 
+                    method: 'PUT', 
+                    body: JSON.stringify(data), 
+                });
+                showMessage(`Товар "${updatedProduct.name}" успешно обновлен!`, false);
+                hideProductModal();
+                fetchProducts(); 
+            } catch (error) {
+                // Ошибка уже показана
+            }
+        };
+
+        window.confirmDeleteProduct = (productId, productName) => {
+            const modal = document.getElementById('confirm-delete-modal');
+            const warningTextSpan = document.getElementById('delete-warning-text');
+            warningTextSpan.innerHTML = `Вы уверены, что хотите удалить <span id="delete-item-type" class="font-semibold">товар</span> "<span id="delete-item-name" class="font-semibold">${productName}</span>"?`;
+            
+            const confirmBtn = document.getElementById('confirm-delete-btn');
+            confirmBtn.onclick = () => handleDeleteProduct(productId);
+            
+            modal.classList.remove('hidden');
+        };
+        
+        window.handleDeleteProduct = async (productId) => {
+            try {
+                await apiFetch(`/products/${productId}`, { 
+                    method: 'DELETE', 
+                });
+                showMessage(`Товар ID:${productId} успешно удален.`, false);
+                document.getElementById('confirm-delete-modal').classList.add('hidden');
+                fetchProducts(); 
+            } catch (error) {
+                // Ошибка уже показана
+            }
+        };
+
+        // --- ИНИЦИАЛИЗАЦИЯ ---
+
+        document.addEventListener('DOMContentLoaded', () => {
+            window.showAuthTab('login'); 
+            fetchUserProfile(); 
+        });
+
     </script>
 </body>
 </html>

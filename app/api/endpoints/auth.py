@@ -7,9 +7,9 @@ from app.core.security import create_access_token, verify_password, hash_passwor
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-router = APIRouter(prefix="/token", tags=["Tokens"])
+router = APIRouter(prefix="/auth/jwt", tags=["Tokens"])
 
-@router.post("/")
+@router.post("/token")
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_async_session)

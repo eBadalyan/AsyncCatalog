@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-# from app.database import create_db_and_tables
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
+
 from app.api.endpoints import product as product_router
 from app.api.endpoints import user as user_router
 from app.api.endpoints import auth as auth_router
@@ -12,6 +13,18 @@ from app.models import user, product, category, cart
 
 
 app = FastAPI(title="FastAPI Catalog API")
+
+origins = [
+    "*", 
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"], 
+    allow_headers=["*"],
+)
 
 @app.on_event("startup")
 async def startup_event():
